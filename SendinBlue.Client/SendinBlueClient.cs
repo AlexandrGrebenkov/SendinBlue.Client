@@ -13,10 +13,13 @@ namespace SendinBlue.Client
         private const string apiUrl = "https://api.sendinblue.com/v3/";
         private readonly string apiKey;
         private readonly RestClient client;
+        private readonly IExceptionFactory exceptionFactory;
 
-        public SendinBlueClient(string apiKey)
+        public SendinBlueClient(string apiKey, IExceptionFactory exceptionFactory)
         {
             this.apiKey = apiKey;
+            this.exceptionFactory = exceptionFactory;
+
             client = new RestClient(apiUrl);
             client.Authenticator = new ApiKeyAuthenticator(apiKey);
         }
@@ -30,12 +33,12 @@ namespace SendinBlue.Client
         public async Task<IEnumerable<ContactAttribute>> GetContactAttributesAsync(CancellationToken cancellationToken)
         {
             var request = new RestRequest(Method.GET);
-            request.Resource = "contacts/attributes";
+            request.Resource = "contacts/attributes1";
             var response = await client.ExecuteAsync<ContactAttributes>(request);
 
             if (response.StatusCode == HttpStatusCode.OK)
                 return response.Data.Attributes;
-            throw new Exception(response.StatusDescription);
+            throw exceptionFactory.CreateException(response);
         }
 
         /// <summary>

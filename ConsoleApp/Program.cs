@@ -17,7 +17,9 @@ namespace ConsoleApp
 
             IConfigurationRoot configuration = builder.Build();
 
-            var client = new SendinBlueClient(configuration.GetSection("SendinBlue:ApiKey").Value);
+            string apikey = configuration.GetSection("SendinBlue:ApiKey").Value;
+            var exceptionFactory = new ExceptionFactory();
+            var client = new SendinBlueClient(apikey, exceptionFactory);
 
             var attributes = await client.GetContactAttributesAsync(CancellationToken.None);
             Console.ReadLine();
