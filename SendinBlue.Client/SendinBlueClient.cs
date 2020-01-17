@@ -1,22 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using RestSharp;
 using SendinBlue.Client.Models;
 
 namespace SendinBlue.Client
 {
     public class SendinBlueClient
     {
+        private const string apiUrl = "https://api.sendinblue.com/v3/";
+        private readonly string apiKey;
+        private readonly RestClient client;
+
+        public SendinBlueClient(string apiKey)
+        {
+            this.apiKey = apiKey;
+            client = new RestClient(apiUrl);
+            client.Authenticator = new ApiKeyAuthenticator(apiKey);
+        }
+
         #region Contacts
 
         /// <summary>
         /// Get list of all attributes.
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task<ContactAttribute> GetContactAttributesAsync(CancellationToken cancellationToken)
+        public async Task<IEnumerable<ContactAttribute>> GetContactAttributesAsync(CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.GET);
+            request.Resource = "contacts/attributes";
+            var response = await client.ExecuteAsync<ContactAttributes>(request);
+
+            if (response.StatusCode == HttpStatusCode.OK)
+                return response.Data.Attributes;
+            throw new Exception(response.StatusDescription);
         }
 
         /// <summary>
