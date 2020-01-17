@@ -11,13 +11,11 @@ namespace SendinBlue.Client
     public class SendinBlueClient
     {
         private const string apiUrl = "https://api.sendinblue.com/v3/";
-        private readonly string apiKey;
         private readonly RestClient client;
         private readonly IExceptionFactory exceptionFactory;
 
         public SendinBlueClient(string apiKey, IExceptionFactory exceptionFactory)
         {
-            this.apiKey = apiKey;
             this.exceptionFactory = exceptionFactory;
 
             client = new RestClient(apiUrl);
