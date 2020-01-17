@@ -12,34 +12,15 @@ namespace SendinBlue.Client.Models
         /// <summary>
         /// Initializes a new instance of the <see cref="ContactAttribute" /> class.
         /// </summary>
-        [JsonConstructor]
-        protected ContactAttribute()
+        //[JsonConstructor]
+        public ContactAttribute()
         {
         }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ContactAttribute" /> class.
-        /// </summary>
-        /// <param name="value">Id of the value (required).</param>
-        /// <param name="label">Label of the value (required).</param>
-        public ContactAttribute(int value, string label)
-        {
-            Value = value;
-            Label = label ?? throw new InvalidDataException("label is a required property for ContactAttribute and cannot be null");
-        }
+        public string Name { get; set; }
 
-        /// <summary>
-        /// Id of the value.
-        /// </summary>
-        /// <value>Id of the value.</value>
-        [DataMember(Name = "value", EmitDefaultValue = false)]
-        public int Value { get; set; }
+        public string Category { get; set; }
 
-        /// <summary>
-        /// Label of the value.
-        /// </summary>
-        /// <value>Label of the value.</value>
-        [DataMember(Name = "label", EmitDefaultValue = false)]
-        public string Label { get; set; }
+        public AttributeType Type { get; set; }
     }
 }
