@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using RestSharp;
 using SendinBlue.Client.Models;
 
@@ -13,6 +15,7 @@ namespace SendinBlue.Client
         private const string apiUrl = "https://api.sendinblue.com/v3/";
         private readonly RestClient client;
         private readonly IExceptionFactory exceptionFactory;
+        private readonly JsonSerializerSettings serializerSettings;
 
         public SendinBlueClient(string apiKey, IExceptionFactory exceptionFactory)
         {
@@ -20,6 +23,15 @@ namespace SendinBlue.Client
 
             client = new RestClient(apiUrl);
             client.Authenticator = new ApiKeyAuthenticator(apiKey);
+
+            var contractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy()
+            };
+            serializerSettings = new JsonSerializerSettings
+            {
+                ContractResolver = contractResolver
+            };
         }
 
         #region Contacts
@@ -31,7 +43,7 @@ namespace SendinBlue.Client
         public async Task<IEnumerable<ContactAttribute>> GetContactAttributesAsync(CancellationToken cancellationToken)
         {
             var request = new RestRequest(Method.GET);
-            request.Resource = "contacts/attributes1";
+            request.Resource = "contacts/attributes";
             var response = await client.ExecuteAsync<ContactAttributes>(request);
 
             if (response.StatusCode == HttpStatusCode.OK)
@@ -44,9 +56,20 @@ namespace SendinBlue.Client
         /// </summary>
         /// <param name="attribute">Attribute.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task CreateContactAttributeAsync(ContactAttribute attribute, CancellationToken cancellationToken)
+        public async Task CreateContactAttributeAsync(ContactAttribute attribute, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.POST);
+            var attributeCategory = attribute.Category;
+            var attributeName = attribute.Name;
+            request.Resource = $"contacts/attributes/{attributeCategory}/{attributeName}";
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("content-type", "application/json");
+            var json = ToJson(new CreatingAttribute() { Type = attribute.Type });
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync(request);
+            if (response.StatusCode >= HttpStatusCode.BadRequest)
+                throw exceptionFactory.CreateException(response);
         }
 
         /// <summary>
@@ -54,7 +77,6 @@ namespace SendinBlue.Client
         /// </summary>
         /// <param name="contacts">Contacts.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns></returns>
         public Task ImportContactsAsync(IEnumerable<dynamic> contacts, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
@@ -68,18 +90,33 @@ namespace SendinBlue.Client
         /// Get email templates list.
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task<IEnumerable<EmailTemplateSummary>> GetEmailTemplatesListAsync(CancellationToken cancellationToken)
+        public async Task<IEnumerable<EmailTemplateSummary>> GetEmailTemplatesListAsync(CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.GET);
+            request.Resource = "smtp/templates";
+            var response = await client.ExecuteAsync<EmailTemplatesList>(request);
+
+            if (response.StatusCode == HttpStatusCode.OK)
+                return response.Data.Templates;
+            throw exceptionFactory.CreateException(response);
         }
 
         /// <summary>
         /// Create email campaigns list.
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task CreateEmailCampaignsAsync(CancellationToken cancellationToken)
+        public async Task CreateEmailCampaignsAsync(CreatingEmailCampaign campaign, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.POST);
+            request.Resource = $"emailCampaigns";
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("content-type", "application/json");
+            var json = ToJson(campaign);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync(request);
+            if (response.StatusCode >= HttpStatusCode.BadRequest)
+                throw exceptionFactory.CreateException(response);
         }
 
         /// <summary>
@@ -117,5 +154,10 @@ namespace SendinBlue.Client
         }
 
         #endregion
+
+        private string ToJson(object obj)
+        {
+            return JsonConvert.SerializeObject(obj, serializerSettings);
+        }
     }
 }

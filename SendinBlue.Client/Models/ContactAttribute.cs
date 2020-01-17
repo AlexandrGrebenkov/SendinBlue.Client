@@ -1,8 +1,4 @@
-﻿using System.IO;
-using System.Runtime.Serialization;
-using Newtonsoft.Json;
-
-namespace SendinBlue.Client.Models
+﻿namespace SendinBlue.Client.Models
 {
     /// <summary>
     /// Name of contact data column.
@@ -19,7 +15,7 @@ namespace SendinBlue.Client.Models
 
         public string Name { get; set; }
 
-        public string Category { get; set; }
+        public string Category { get; set; } = "normal";
 
         public AttributeType Type { get; set; }
     }
