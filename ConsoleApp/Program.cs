@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,23 @@ namespace ConsoleApp
 
             var templates = await client.GetEmailTemplatesListAsync(CancellationToken.None);
             var attributes = await client.GetContactAttributesAsync(CancellationToken.None);
+            var folders = await client.GetFoldersAsync(CancellationToken.None);
+            var contacts = new List<Dictionary<string, object>>
+            {
+                new Dictionary<string, object>()
+                { 
+                    { "Email", "alexandrGrebenkov@gmail.com" }, 
+                    { "FirstName", "Alexandr" }, 
+                    { "Lastname", "Grebenkov" }, 
+                },
+                new Dictionary<string, object>()
+                {
+                    { "Email", "JS@gmail.com" },
+                    { "FirstName", "John" },
+                    { "Lastname", "Smith" },
+                }
+            };
+            var listId = await client.ImportContactsAsync(contacts, CancellationToken.None);
             Console.ReadLine();
         }
     }

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -58,6 +60,7 @@ namespace SendinBlue.Client
         /// <param name="cancellationToken">Cancellation token.</param>
         public async Task CreateContactAttributeAsync(ContactAttribute attribute, CancellationToken cancellationToken)
         {
+            if (attribute.Name == "EMAIL") return; // HACK: EMAIL attribute always exist but not returns by 'GET' contacts/attributes request.
             var request = new RestRequest(Method.POST);
             var attributeCategory = attribute.Category;
             var attributeName = attribute.Name;
@@ -77,9 +80,90 @@ namespace SendinBlue.Client
         /// </summary>
         /// <param name="contacts">Contacts.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task ImportContactsAsync(IEnumerable<dynamic> contacts, CancellationToken cancellationToken)
+        /// <returns>List id.</returns>
+        public async Task<int> ImportContactsAsync(IEnumerable<IDictionary<string, object>> contacts, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var attributes = GetHeaders(contacts);
+            var attributesFromService = (await GetContactAttributesAsync(cancellationToken)).Select(_ => _.Name).ToList();
+            var attributesToCreate = attributes.Except(attributesFromService).ToList();
+            foreach (var attribute in attributesToCreate)
+            {
+                await CreateContactAttributeAsync(new ContactAttribute { Name = attribute }, cancellationToken);
+            }
+
+            var listId = await CreateListAsync(DateTimeOffset.UtcNow.ToString(), cancellationToken);
+
+            var fileBody = CreateFileBody(contacts, attributes);
+
+            var request = new RestRequest(Method.POST);
+            request.Resource = "contacts/import";
+            var dto = new ImportingContacts()
+            {
+                FileBody = fileBody,
+                ListIds = new int[] { listId },
+            };
+            var json = ToJson(dto);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync(request);
+            if (response.StatusCode >= HttpStatusCode.BadRequest)
+                throw exceptionFactory.CreateException(response);
+
+            return listId;
+        }
+
+        private static IEnumerable<string> GetHeaders(IEnumerable<IDictionary<string, object>> contacts)
+        {
+            return contacts.First().Select(_ => _.Key.ToUpper());
+        }
+
+        private static string CreateFileBody(IEnumerable<IDictionary<string, object>> contacts, IEnumerable<string> attributes)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine(string.Join(";", attributes));
+            foreach (var contact in contacts)
+            {
+                builder.AppendLine(string.Join(";", contact.Values));
+            }
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Get list of all folders.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public async Task<IEnumerable<Folder>> GetFoldersAsync(CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.GET);
+            request.Resource = "contacts/folders";
+            var response = await client.ExecuteAsync<FoldersList>(request);
+
+            if (response.StatusCode == HttpStatusCode.OK)
+                return response.Data.Folders;
+            throw exceptionFactory.CreateException(response);
+        }
+
+        /// <summary>
+        /// Creates a contacts list.
+        /// </summary>
+        /// <param name="name">List name.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public async Task<int> CreateListAsync(string name, CancellationToken cancellationToken)
+        {
+            var folder = (await GetFoldersAsync(cancellationToken))?.FirstOrDefault()
+                ?? throw exceptionFactory.CreateException("The account has no folders for lists of lontacts. Create this first.");
+
+            var request = new RestRequest(Method.POST);
+            request.Resource = "contacts/lists";
+            var dto = new NewContactsList { Name = name, FolderId = folder.Id };
+            var json = ToJson(dto);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync<IdDto>(request);
+            if (response.StatusCode >= HttpStatusCode.BadRequest)
+                throw exceptionFactory.CreateException(response);
+
+            return response.Data.Id;
         }
 
         #endregion
