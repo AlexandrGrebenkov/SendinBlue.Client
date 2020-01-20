@@ -11,5 +11,10 @@ namespace ConsoleApp
         {
             throw new Exception(response.StatusDescription);
         }
+
+        public Exception CreateException(string message, [CallerMemberName] string methodName = null)
+        {
+            throw new Exception(message);
+        }
     }
 }
