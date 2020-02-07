@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,11 +45,11 @@ namespace SendinBlue.Client
         {
             var request = new RestRequest(Method.GET);
             request.Resource = "contacts/attributes";
-            var response = await client.ExecuteAsync<ContactAttributes>(request);
+            var response = await client.ExecuteAsync<ContactAttributes>(request, cancellationToken);
 
-            if (response.StatusCode == HttpStatusCode.OK)
-                return response.Data.Attributes;
-            throw exceptionFactory.CreateException(response);
+            if (!response.IsSuccessful)
+                throw exceptionFactory.CreateException(response);
+            return response.Data.Attributes;
         }
 
         /// <summary>
@@ -70,8 +69,8 @@ namespace SendinBlue.Client
             var json = ToJson(new CreatingAttribute() { Type = attribute.Type });
             request.AddParameter("application/json", json, ParameterType.RequestBody);
 
-            var response = await client.ExecuteAsync(request);
-            if (response.StatusCode >= HttpStatusCode.BadRequest)
+            var response = await client.ExecuteAsync(request, cancellationToken);
+            if (!response.IsSuccessful)
                 throw exceptionFactory.CreateException(response);
         }
 
@@ -106,7 +105,7 @@ namespace SendinBlue.Client
             request.AddParameter("application/json", json, ParameterType.RequestBody);
 
             var response = await client.ExecuteAsync(request);
-            if (response.StatusCode >= HttpStatusCode.BadRequest)
+            if (!response.IsSuccessful)
                 throw exceptionFactory.CreateException(response);
 
             return listId;
@@ -136,11 +135,11 @@ namespace SendinBlue.Client
         {
             var request = new RestRequest(Method.GET);
             request.Resource = "contacts/folders";
-            var response = await client.ExecuteAsync<FoldersList>(request);
+            var response = await client.ExecuteAsync<FoldersList>(request, cancellationToken);
 
-            if (response.StatusCode == HttpStatusCode.OK)
-                return response.Data.Folders;
-            throw exceptionFactory.CreateException(response);
+            if (!response.IsSuccessful)
+                throw exceptionFactory.CreateException(response);
+            return response.Data.Folders;
         }
 
         /// <summary>
@@ -160,12 +159,39 @@ namespace SendinBlue.Client
             request.AddParameter("application/json", json, ParameterType.RequestBody);
 
             var response = await client.ExecuteAsync<IdDto>(request);
-            if (response.StatusCode >= HttpStatusCode.BadRequest)
+            if (!response.IsSuccessful)
                 throw exceptionFactory.CreateException(response);
 
             return response.Data.Id;
         }
 
+        /// <inheritdoc/>
+        public async Task<ListDetails> GetListDetails(int listId, CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.GET);
+            request.Resource = $"contacts/lists/{listId}";
+            var response = await client.ExecuteAsync<ListDetails>(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+            return response.Data;
+        }
+
+        /// <inheritdoc/>
+        public async Task WaitForImportingDone(int contactsCount, int listId, CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                var info = await GetListDetails(listId, cancellationToken);
+                if (info.TotalSubscribers == contactsCount)
+                {
+                    return;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
+        }
         #endregion
 
         #region Email
@@ -178,11 +204,11 @@ namespace SendinBlue.Client
         {
             var request = new RestRequest(Method.GET);
             request.Resource = "smtp/templates";
-            var response = await client.ExecuteAsync<EmailTemplatesList>(request);
+            var response = await client.ExecuteAsync<EmailTemplatesList>(request, cancellationToken);
 
-            if (response.StatusCode == HttpStatusCode.OK)
-                return response.Data.Templates;
-            throw exceptionFactory.CreateException(response);
+            if (!response.IsSuccessful)
+                throw exceptionFactory.CreateException(response);
+            return response.Data.Templates;
         }
 
         /// <summary>
@@ -198,19 +224,49 @@ namespace SendinBlue.Client
             var json = ToJson(campaign);
             request.AddParameter("application/json", json, ParameterType.RequestBody);
 
-            var response = await client.ExecuteAsync(request);
-            if (response.StatusCode >= HttpStatusCode.BadRequest)
+            var response = await client.ExecuteAsync(request, cancellationToken);
+            if (!response.IsSuccessful)
                 throw exceptionFactory.CreateException(response);
         }
 
         /// <summary>
-        /// Schedule the email campaign.
+        /// Create the email campaign.
         /// </summary>
-        /// <param name="campaignId">Campaign's id.</param>
+        /// <param name="campaign">Campaign data.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        public Task ScheduleEmailCampaign(int campaignId, CancellationToken cancellationToken)
+        /// <returns>Campaign id.</returns>
+        public async Task<int> CreateEmailCampaign(CreatingEmailCampaign campaign, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.POST);
+            request.Resource = "emailCampaigns";
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("content-type", "application/json");
+            var json = ToJson(campaign);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync<IdDto>(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+            return response.Data.Id;
+        }
+
+        /// <inheritdoc/>
+        public async Task SendEmailCampaign(int campaignId, CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.POST);
+            request.Resource = $"emailCampaigns/{campaignId}/sendNow";
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("content-type", "application/json");
+
+            var response = await client.ExecuteAsync(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
         }
 
         /// <summary>
@@ -222,20 +278,80 @@ namespace SendinBlue.Client
             throw new NotImplementedException();
         }
 
+        /// <inheritdoc/>
+        public async Task<string> SendTransactionalEmail(TransactionalEmail email, CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.POST);
+            request.Resource = $"smtp/email";
+            request.AddHeader("accept", "application/json");
+            var json = ToJson(email);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync<string>(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+            return response.Data;
+        }
+
         #endregion
 
         #region SMS
 
-        /// <summary>
-        /// Send SMS for contact.
-        /// </summary>
-        /// <param name="telNumber">Telephone number (with country code).</param>
-        /// <param name="smsBody">SMS message body.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        public Task SendSms(string telNumber, string smsBody, CancellationToken cancellationToken)
+        /// <inheritdoc/>
+        public async Task<int> CreateSmsCampaign(CreatingSmsCampaign campaign, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            var request = new RestRequest(Method.POST);
+            request.Resource = "smsCampaigns";
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("content-type", "application/json");
+            var json = ToJson(campaign);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync<IdDto>(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+            return response.Data.Id;
         }
+
+        /// <inheritdoc/>
+        public async Task SendSmsCampaign(int campaignId, CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.POST);
+            request.Resource = $"smsCampaigns/{campaignId}/sendNow";
+            request.AddHeader("accept", "application/json");
+
+            var response = await client.ExecuteAsync(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<string> SendTransactionalSms(TransactionalSms sms, CancellationToken cancellationToken)
+        {
+            var request = new RestRequest(Method.POST);
+            request.Resource = $"transactionalSMS/sms";
+            request.AddHeader("accept", "application/json");
+            var json = ToJson(sms);
+            request.AddParameter("application/json", json, ParameterType.RequestBody);
+
+            var response = await client.ExecuteAsync<TransactionalSmsResponse>(request, cancellationToken);
+
+            if (!response.IsSuccessful)
+            {
+                throw exceptionFactory.CreateException(response);
+            }
+            return response.Data.MessageId.ToString();
+        }
+
 
         #endregion
 
